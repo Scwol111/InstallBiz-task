@@ -1,0 +1,44 @@
+volumes:
+  pg_data:
+  pg_logs:
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - pg_logs:/var/log
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+  
+  migrator:
+    build: .
+    image: fast_api_service
+    container_name: fast_api_migrator
+    pull_policy: never
+    working_dir: /service
+    entrypoint: ["poetry", "run", "alembic", "upgrade", "head"]
+    restart: no
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres/postgres
+    depends_on:
+      - postgres
+
+  api_service:
+    container_name: fast_api_service
+    image: fast_api_service
+    pull_policy: never
+    working_dir: /service
+    entrypoint: ["poetry", "run", "uvicorn", "--host", "0.0.0.0", "main:app"]
+    restart: unless-stopped
+    depends_on:
+      - migrator
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres/postgres
+      - SECRET_KEY=1234567890
+      - JWT_LIVE_MINUTES=60
+    ports:
+      - 8000:8000
